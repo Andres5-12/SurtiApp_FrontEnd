@@ -30,6 +30,9 @@ fun MainScreen() {
     val sessionManager = remember { SessionManager(context) }
     val api = RetrofitClient.apiService
     
+    val userId by sessionManager.userId.collectAsState(initial = null)
+    val negocioIdState by sessionManager.negocioId.collectAsState(initial = null)
+
     val factory = viewModelFactory {
         initializer { TransactionViewModel(api, sessionManager) }
         initializer { RegistroViewModel(api) }
@@ -39,7 +42,18 @@ fun MainScreen() {
         initializer { ContactoViewModel(api, sessionManager) }
     }
 
-    // Determinar si mostrar la barra inferior (solo en las pantallas principales)
+    // Compartir el TransactionViewModel entre pantallas de finanzas
+    val sharedTxViewModel: TransactionViewModel = viewModel(factory = factory)
+
+    // Efecto para manejar la sesión inicial y redirecciones
+    LaunchedEffect(userId, negocioIdState) {
+        if (userId == null && currentDestination?.route != Pantalla.Login.route && currentDestination?.route != Pantalla.Registro.route) {
+            navController.navigate(Pantalla.Login.route) {
+                popUpTo(0)
+            }
+        }
+    }
+
     val showBottomBar = itemsNavegacion.any { it.route == currentDestination?.route }
 
     Scaffold(
@@ -76,8 +90,14 @@ fun MainScreen() {
                 LoginScreen(
                     viewModel = loginViewModel,
                     onLoginSuccess = { negocioId ->
-                        navController.navigate(Pantalla.Inventario.route) {
-                            popUpTo(Pantalla.Login.route) { inclusive = true }
+                        if (negocioId == -1L) {
+                            navController.navigate(Pantalla.Perfil.route) {
+                                popUpTo(Pantalla.Login.route) { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate(Pantalla.Transacciones.route) {
+                                popUpTo(Pantalla.Login.route) { inclusive = true }
+                            }
                         }
                     },
                     onNavigateToRegister = {
@@ -90,9 +110,10 @@ fun MainScreen() {
                 val registroViewModel: RegistroViewModel = viewModel(factory = factory)
                 RegistroScreen(
                     viewModel = registroViewModel,
-                    onRegistroSuccess = { _, _ ->
-                        navController.navigate(Pantalla.Inventario.route) {
-                            popUpTo(Pantalla.Login.route) { inclusive = true }
+                    onRegistroSuccess = { userId ->
+                        // Después de registro exitoso, vamos a login para que entre
+                        navController.navigate(Pantalla.Login.route) {
+                            popUpTo(Pantalla.Registro.route) { inclusive = true }
                         }
                     },
                     onBack = { navController.popBackStack() }
@@ -108,11 +129,16 @@ fun MainScreen() {
             }
 
             composable(Pantalla.Transacciones.route) {
-                val txViewModel: TransactionViewModel = viewModel(factory = factory)
                 LaunchedEffect(Unit) {
-                    txViewModel.cargarDatos()
+                    sharedTxViewModel.cargarDatos()
                 }
-                TransactionHistoryScreen(viewModel = txViewModel)
+                TransactionHistoryScreen(viewModel = sharedTxViewModel, onNavigateToCierre = {
+                    navController.navigate(Pantalla.CierreCaja.route)
+                })
+            }
+
+            composable(Pantalla.CierreCaja.route) {
+                CierreCajaScreen(viewModel = sharedTxViewModel, onBack = { navController.popBackStack() })
             }
 
             composable(Pantalla.Contactos.route) {
@@ -121,6 +147,10 @@ fun MainScreen() {
                     contactoViewModel.cargarContactos()
                 }
                 ContactoScreen(viewModel = contactoViewModel)
+            }
+
+            composable(Pantalla.Balance.route) {
+                BalanceGeneralScreen(viewModel = sharedTxViewModel)
             }
 
             composable(Pantalla.Perfil.route) {

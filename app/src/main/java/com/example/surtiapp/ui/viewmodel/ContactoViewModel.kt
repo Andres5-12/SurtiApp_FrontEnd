@@ -28,7 +28,10 @@ class ContactoViewModel(
             val negocioId = sessionManager.negocioId.first() ?: return@launch
             _loading.value = true
             try {
-                _contactos.value = api.getContactos(negocioId)
+                val response = api.getContactos(negocioId)
+                if (response.isSuccessful) {
+                    _contactos.value = response.body() ?: emptyList()
+                }
             } catch (e: Exception) {
                 // Manejar error
             } finally {
@@ -37,21 +40,45 @@ class ContactoViewModel(
         }
     }
 
-    fun agregarContacto(nombre: String, telefono: String, tipo: String) {
+    fun agregarContacto(nombre: String, telefono: String, tipo: String, id: Long? = null) {
         viewModelScope.launch {
             val negocioId = sessionManager.negocioId.first() ?: return@launch
+            val userId = sessionManager.userId.first() ?: return@launch
             _loading.value = true
             try {
-                val nuevo = Contacto(
+                val contacto = Contacto(
+                    id = id,
                     nombre = nombre,
                     telefono = telefono,
                     tipo = tipo,
-                    negocio = Negocio(id = negocioId, nombre = "", tipoNegocio = "", identificacionFiscal = "", usuario = Usuario(nombre = "", email = ""))
+                    negocio = Negocio(
+                        id = negocioId, 
+                        nombre = "", 
+                        usuario = Usuario(id = userId, nombre = "", email = "")
+                    )
                 )
-                api.crearContacto(nuevo)
-                cargarContactos()
+                val response = api.crearContacto(contacto)
+                if (response.isSuccessful) {
+                    cargarContactos()
+                }
             } catch (e: Exception) {
                 // Manejar error
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun eliminarContacto(id: Long) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val response = api.eliminarContacto(id)
+                if (response.isSuccessful) {
+                    cargarContactos()
+                }
+            } catch (e: Exception) {
+                // Error
             } finally {
                 _loading.value = false
             }

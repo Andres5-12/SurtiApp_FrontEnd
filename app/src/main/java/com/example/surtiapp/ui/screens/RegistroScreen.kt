@@ -21,23 +21,20 @@ import com.example.surtiapp.ui.viewmodel.RegistroUiState
 @Composable
 fun RegistroScreen(
     viewModel: RegistroViewModel,
-    onRegistroSuccess: (Long, Long) -> Unit,
+    onRegistroSuccess: (Long) -> Unit,
     onBack: () -> Unit
 ) {
     var nombreU by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var nombreN by remember { mutableStateOf("") }
-    var tipoN by remember { mutableStateOf("") }
-    var nit by remember { mutableStateOf("") }
 
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState) {
         if (uiState is RegistroUiState.Success) {
             val state = uiState as RegistroUiState.Success
-            onRegistroSuccess(state.userId, state.negocioId)
+            onRegistroSuccess(state.userId)
         }
     }
 
@@ -79,7 +76,8 @@ fun RegistroScreen(
                 onValueChange = { email = it }, 
                 label = { Text("Email") },
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("ejemplo@correo.com") }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -94,45 +92,11 @@ fun RegistroScreen(
                         Icons.Default.Visibility
                     else Icons.Default.VisibilityOff
 
-                    val description = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña"
-
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(imageVector = image, contentDescription = description)
+                        Icon(imageVector = image, contentDescription = null)
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-            Text("Detalles del Negocio", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = nombreN, 
-                onValueChange = { nombreN = it }, 
-                label = { Text("Nombre del Negocio") },
-                leadingIcon = { Icon(Icons.Default.Store, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            OutlinedTextField(
-                value = tipoN, 
-                onValueChange = { tipoN = it }, 
-                label = { Text("Tipo de Negocio") },
-                leadingIcon = { Icon(Icons.Default.Category, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            OutlinedTextField(
-                value = nit, 
-                onValueChange = { nit = it }, 
-                label = { Text("NIT / Identificación") },
-                leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -142,9 +106,10 @@ fun RegistroScreen(
                 CircularProgressIndicator()
             } else {
                 Button(
-                    onClick = { viewModel.registrar(nombreU, email, pass, nombreN, tipoN, nit) },
+                    onClick = { viewModel.registrar(nombreU, email, pass) },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    enabled = nombreU.isNotBlank() && email.isNotBlank() && pass.isNotBlank()
                 ) {
                     Text("Registrarme ahora", modifier = Modifier.padding(8.dp))
                 }

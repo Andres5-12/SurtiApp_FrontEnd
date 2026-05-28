@@ -22,6 +22,9 @@ class ProductViewModel(
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
+    private val _allAvailableProducts = MutableStateFlow<List<Producto>>(emptyList())
+    val allAvailableProducts = _allAvailableProducts.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
@@ -41,6 +44,7 @@ class ProductViewModel(
             _loading.value = true
             _error.value = null
             try {
+                // Obtenemos solo los productos filtrados por negocioId directamente desde el API
                 val response = api.getProductos(negocioId)
                 if (response.isSuccessful) {
                     _allProducts.value = response.body() ?: emptyList()
@@ -49,6 +53,37 @@ class ProductViewModel(
                 }
             } catch (e: Exception) {
                 _error.value = "Error al cargar inventario: ${e.message}"
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun agregarProductoExistente(producto: Producto, cantidad: Int) {
+        viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
+            try {
+                val negocioId = sessionManager.negocioId.first() ?: return@launch
+                val userId = sessionManager.userId.first() ?: return@launch
+                
+                val nuevo = producto.copy(
+                    id = null,
+                    stockActual = cantidad,
+                    negocio = Negocio(
+                        id = negocioId, 
+                        nombre = "", 
+                        usuario = Usuario(id = userId, nombre = "", email = "")
+                    )
+                )
+                val response = api.crearProducto(nuevo)
+                if (response.isSuccessful) {
+                    cargarProductos()
+                } else {
+                    _error.value = "Error al guardar: ${response.code()}"
+                }
+            } catch (e: Exception) {
+                _error.value = "Error al agregar producto existente: ${e.message}"
             } finally {
                 _loading.value = false
             }
@@ -65,8 +100,11 @@ class ProductViewModel(
     ) {
         viewModelScope.launch {
             _loading.value = true
+            _error.value = null
             try {
                 val negocioId = sessionManager.negocioId.first() ?: return@launch
+                val userId = sessionManager.userId.first() ?: return@launch
+                
                 val nuevo = Producto(
                     nombre = nombre,
                     descripcion = descripcion,
@@ -74,12 +112,82 @@ class ProductViewModel(
                     precioVenta = venta,
                     stockActual = stock,
                     stockMinimo = stockMin,
-                    negocio = Negocio(id = negocioId, nombre = "", tipoNegocio = "", identificacionFiscal = "", usuario = Usuario(nombre = "", email = ""))
+                    negocio = Negocio(
+                        id = negocioId, 
+                        nombre = "", 
+                        usuario = Usuario(id = userId, nombre = "", email = "")
+                    )
                 )
-                api.crearProducto(nuevo)
-                cargarProductos() // Recargamos la lista
+                val response = api.crearProducto(nuevo)
+                if (response.isSuccessful) {
+                    cargarProductos() // Recargamos la lista
+                } else {
+                    _error.value = "Error al servidor (${response.code()}): ${response.errorBody()?.string()}"
+                }
             } catch (e: Exception) {
                 _error.value = "Error al guardar producto: ${e.message}"
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun actualizarProducto(
+        id: Long,
+        nombre: String,
+        descripcion: String,
+        costo: Double,
+        venta: Double,
+        stock: Int,
+        stockMin: Int
+    ) {
+        viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
+            try {
+                val negocioId = sessionManager.negocioId.first() ?: return@launch
+                val userId = sessionManager.userId.first() ?: return@launch
+                
+                val editado = Producto(
+                    id = id,
+                    nombre = nombre,
+                    descripcion = descripcion,
+                    precioCosto = costo,
+                    precioVenta = venta,
+                    stockActual = stock,
+                    stockMinimo = stockMin,
+                    negocio = Negocio(
+                        id = negocioId, 
+                        nombre = "", 
+                        usuario = Usuario(id = userId, nombre = "", email = "")
+                    )
+                )
+                val response = api.crearProducto(editado)
+                if (response.isSuccessful) {
+                    cargarProductos()
+                } else {
+                    _error.value = "Error al actualizar (${response.code()})"
+                }
+            } catch (e: Exception) {
+                _error.value = "Error al actualizar: ${e.message}"
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
+    fun eliminarProducto(id: Long) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val response = api.eliminarProducto(id)
+                if (response.isSuccessful) {
+                    cargarProductos()
+                } else {
+                    _error.value = "Error al eliminar producto (${response.code()})"
+                }
+            } catch (e: Exception) {
+                _error.value = "Error de conexión: ${e.message}"
             } finally {
                 _loading.value = false
             }

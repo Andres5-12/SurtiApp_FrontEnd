@@ -83,7 +83,7 @@ fun ProductoCard(producto: Producto) {
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = producto.descripcion, color = Color.Gray, fontSize = 14.sp)
+            Text(text = producto.descripcion ?: "", color = Color.Gray, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(text = "Stock: ${producto.stockActual}", color = if (producto.stockActual <= producto.stockMinimo) Color.Red else Color.Black)

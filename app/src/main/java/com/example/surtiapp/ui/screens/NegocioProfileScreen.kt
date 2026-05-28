@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.example.surtiapp.data.model.Negocio
 import com.example.surtiapp.ui.viewmodel.NegocioUiState
 import com.example.surtiapp.ui.viewmodel.NegocioViewModel
@@ -19,21 +21,51 @@ import com.example.surtiapp.ui.viewmodel.NegocioViewModel
 @Composable
 fun NegocioProfileScreen(viewModel: NegocioViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Mi Negocio") }) }
+        topBar = { 
+            TopAppBar(
+                title = { Text("Mi Perfil") },
+                actions = {
+                    IconButton(onClick = { showLogoutConfirm = true }) {
+                        Icon(Icons.Default.Logout, contentDescription = "Cerrar Sesión", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            ) 
+        }
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
         ) {
             when (val state = uiState) {
                 is NegocioUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
                 is NegocioUiState.Success -> {
-                    NegocioInfoCard(state.negocio)
+                    UserInfoSection(state.negocio.usuario)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    NegocioInfoCard(
+                        negocio = state.negocio,
+                        onEdit = { showEditDialog = true }
+                    )
+                    
+                    if (showEditDialog) {
+                        EditNegocioDialog(
+                            negocio = state.negocio,
+                            onDismiss = { showEditDialog = false },
+                            onConfirm = { nombre, tipo, nit ->
+                                viewModel.actualizarNegocio(state.negocio.id!!, nombre, tipo, nit, state.negocio.usuario.id!!)
+                                showEditDialog = false
+                            }
+                        )
+                    }
                 }
                 is NegocioUiState.NoNegocio -> {
                     RegistroNegocioForm(
@@ -44,10 +76,80 @@ fun NegocioProfileScreen(viewModel: NegocioViewModel) {
                     )
                 }
                 is NegocioUiState.Error -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(text = state.message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+
+            if (showLogoutConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showLogoutConfirm = false },
+                    title = { Text("Cerrar Sesión") },
+                    text = { Text("¿Estás seguro de que deseas cerrar tu sesión actual?") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.logout()
+                                showLogoutConfirm = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cerrar Sesión")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showLogoutConfirm = false }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun UserInfoSection(usuario: com.example.surtiapp.data.model.Usuario) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(56.dp),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = state.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
+                        text = usuario.nombre.take(1).uppercase(),
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(usuario.nombre, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(usuario.email, color = Color.Gray, fontSize = 14.sp)
+                Surface(
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = MaterialTheme.shapes.extraSmall
+                ) {
+                    Text(
+                        "ADMINISTRADOR",
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -56,11 +158,11 @@ fun NegocioProfileScreen(viewModel: NegocioViewModel) {
 }
 
 @Composable
-fun NegocioInfoCard(negocio: Negocio) {
+fun NegocioInfoCard(negocio: Negocio, onEdit: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Card(
@@ -71,49 +173,80 @@ fun NegocioInfoCard(negocio: Negocio) {
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    Icons.Default.Store,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = negocio.nombre,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = negocio.tipoNegocio,
-                    color = Color.Gray,
-                    fontSize = 16.sp
-                )
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Badge, contentDescription = null, tint = Color.Gray)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text("Identificación Fiscal", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                        Text(negocio.identificacionFiscal, fontWeight = FontWeight.Medium)
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Store,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Datos de la Empresa", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                InfoRow(Icons.Default.Business, "Nombre del Negocio", negocio.nombre)
+                InfoRow(Icons.Default.Category, "Tipo de Negocio", negocio.tipoNegocio ?: "No especificado")
+                InfoRow(Icons.Default.Badge, "Identificación Fiscal (NIT)", negocio.identificacionFiscal ?: "No especificado")
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Button(
-                    onClick = { /* Acción para editar */ },
+                    onClick = onEdit,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Modificar Datos")
+                    Text("Editar Datos del Negocio")
                 }
             }
         }
     }
+}
+
+@Composable
+fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            Text(value, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+fun EditNegocioDialog(negocio: Negocio, onDismiss: () -> Unit, onConfirm: (String, String, String) -> Unit) {
+    var nombre by remember { mutableStateOf(negocio.nombre) }
+    var tipo by remember { mutableStateOf(negocio.tipoNegocio ?: "") }
+    var nit by remember { mutableStateOf(negocio.identificacionFiscal ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar Negocio") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = tipo, onValueChange = { tipo = it }, label = { Text("Tipo") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = nit, onValueChange = { nit = it }, label = { Text("NIT / ID") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(nombre, tipo, nit) }, enabled = nombre.isNotBlank()) {
+                Text("Guardar Cambios")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 @Composable

@@ -3,12 +3,12 @@ package com.example.surtiapp.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.surtiapp.data.model.LoginRequest
+import com.example.surtiapp.data.model.Usuario
 import com.example.surtiapp.data.network.ApiService
 import com.example.surtiapp.data.session.SessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import retrofit2.HttpException
 
 class LoginViewModel(
     private val api: ApiService,
@@ -32,19 +32,49 @@ class LoginViewModel(
             _uiState.value = LoginUiState.Loading
             try {
                 val request = LoginRequest(email, pass)
-                val usuario = api.login(request)
+                val responseLogin = api.login(request)
                 
-                // Obtenemos el negocio asociado para guardarlo en la sesión
-                val negocio = api.obtenerNegocioPorUsuario(usuario.id!!)
-                
-                sessionManager.saveSession(usuario.id, negocio.id!!)
-                
-                _uiState.value = LoginUiState.Success(negocio.id)
-            } catch (e: HttpException) {
-                if (e.code() == 401) {
-                    _uiState.value = LoginUiState.Error("Correo o contraseña incorrectos")
+                if (responseLogin.isSuccessful) {
+                    val usuario = responseLogin.body()!!
+                    
+                    // Intentamos obtener el negocio asociado
+                    var negocioId: Long = -1L
+                    try {
+                        val responseNegocio = api.obtenerNegocioPorUsuario(usuario.id!!)
+                        val negocios = responseNegocio.body()
+                        if (responseNegocio.isSuccessful && !negocios.isNullOrEmpty()) {
+                            val negocio = negocios[0]
+                            negocioId = negocio.id!!
+                            sessionManager.saveBaseCaja(negocio.baseCaja)
+                        } else {
+                            // Búsqueda manual si falla el endpoint directo
+                            val responseAll = api.obtenerNegocios()
+                            if (responseAll.isSuccessful) {
+                                val miNegocio = responseAll.body()?.find { it.usuario.id == usuario.id }
+                                if (miNegocio != null) {
+                                    negocioId = miNegocio.id!!
+                                    sessionManager.saveBaseCaja(miNegocio.baseCaja)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Fallback adicional en caso de error de red en el primer intento
+                        val responseAll = try { api.obtenerNegocios() } catch (ex: Exception) { null }
+                        if (responseAll != null && responseAll.isSuccessful) {
+                            val miNegocio = responseAll.body()?.find { it.usuario.id == usuario.id }
+                            negocioId = miNegocio?.id ?: -1L
+                            miNegocio?.let { sessionManager.saveBaseCaja(it.baseCaja) }
+                        }
+                    }
+                    
+                    sessionManager.saveSession(usuario.id!!, negocioId)
+                    _uiState.value = LoginUiState.Success(negocioId)
                 } else {
-                    _uiState.value = LoginUiState.Error("Error del servidor: ${e.code()}")
+                    if (responseLogin.code() == 401) {
+                        _uiState.value = LoginUiState.Error("Correo o contraseña incorrectos")
+                    } else {
+                        _uiState.value = LoginUiState.Error("Error del servidor: ${responseLogin.code()}")
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = LoginUiState.Error("Error de conexión: ${e.localizedMessage}")
